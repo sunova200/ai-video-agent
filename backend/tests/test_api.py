@@ -71,11 +71,25 @@ def _drain():
 
 
 @pytest.fixture()
-def client(tmp_path, monkeypatch):
+def client(request, tmp_path, monkeypatch):
     monkeypatch.setattr("backend.app.config.get_settings", lambda: _settings(tmp_path))
     # routers/pipeline call get_settings imported into their own namespaces
     import backend.app.routers.jobs as jobs_mod
     monkeypatch.setattr(jobs_mod, "get_settings", lambda: _settings(tmp_path))
+
+    fresh_store = request.node.get_closest_marker("fresh_store") is not None
+    if fresh_store:
+        from backend.app import job_store
+        import backend.app.pipeline as pl
+        import backend.app.routers.chat as chat_mod
+        import backend.app.routers.export as export_mod
+
+        replacement = job_store.JobStore()
+        # monkeypatch restores the originals at teardown automatically
+        monkeypatch.setattr(job_store, "store", replacement)
+        monkeypatch.setattr(pl, "store", replacement)
+        monkeypatch.setattr(chat_mod, "store", replacement)
+        monkeypatch.setattr(export_mod, "store", replacement)
     with TestClient(app) as c:
         yield c
 

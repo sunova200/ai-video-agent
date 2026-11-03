@@ -14,7 +14,7 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from backend.app.job_store import store
+from backend.app import job_store
 from backend.app.schemas import JobStatus, StepState
 
 logger = logging.getLogger("pipeline")
@@ -27,16 +27,16 @@ def _run_pipeline(job_id: str) -> None:
     from core.extractor import extract_action_items, extract_key_decisions, extract_questions
     from core.rag_engine import build_rag_chain
 
-    job = store.get(job_id)
+    job = job_store.store.get(job_id)
     if not job:
         return
-    store.update(job_id, status=JobStatus.running)
+    job_store.store.update(job_id, status=JobStatus.running)
 
     def step(name):
-        store.set_step(job_id, name, StepState.active.value)
+        job_store.store.set_step(job_id, name, StepState.active.value)
 
     def done(name):
-        store.set_step(job_id, name, StepState.done.value)
+        job_store.store.set_step(job_id, name, StepState.done.value)
 
     try:
         step("audio")
@@ -63,10 +63,10 @@ def _run_pipeline(job_id: str) -> None:
 
         step("rag")
         rag_chain = build_rag_chain(transcript)
-        store.attach_chain(job_id, rag_chain)
+        job_store.store.attach_chain(job_id, rag_chain)
         done("rag")
 
-        store.update(
+        job_store.store.update(
             job_id,
             status=JobStatus.completed,
             finished_at=datetime.now(timezone.utc),
@@ -84,12 +84,12 @@ def _run_pipeline(job_id: str) -> None:
     except Exception as exc:  # noqa: BLE001
         logger.error("Job %s failed: %s\n%s", job_id, exc, traceback.format_exc())
         # mark whichever step was active as failed
-        j = store.get(job_id)
+        j = job_store.store.get(job_id)
         if j:
             for k, v in dict(j.steps).items():
                 if v == StepState.active.value:
-                    store.set_step(job_id, k, StepState.failed.value)
-        store.update(
+                    job_store.store.set_step(job_id, k, StepState.failed.value)
+        job_store.store.update(
             job_id,
             status=JobStatus.failed,
             error=str(exc)[:1000],

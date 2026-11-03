@@ -5,7 +5,8 @@ import uuid
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from backend.app.config import get_settings
-from backend.app.job_store import step_infos, store
+from backend.app import job_store
+from backend.app.job_store import step_infos
 from backend.app.pipeline import start_job
 from backend.app.schemas import (
     AnalyzeURLRequest,
@@ -36,7 +37,7 @@ def _to_detail(job) -> JobDetail:
 @router.post("/analyze-url", response_model=JobSummary, status_code=status.HTTP_202_ACCEPTED)
 def analyze_url(req: AnalyzeURLRequest):
     """Start an analysis job from a YouTube (yt-dlp supported) URL."""
-    job = store.create(source=req.url.strip(), source_type="url", language=req.language.value)
+    job = job_store.store.create(source=req.url.strip(), source_type="url", language=req.language.value)
     start_job(job.id)
     return JobSummary(
         job_id=job.id, status=job.status, source=job.source,
@@ -72,7 +73,7 @@ async def upload_and_analyze(
                 raise HTTPException(status_code=413, detail=f"File exceeds {settings.max_upload_mb} MB limit")
             out.write(chunk)
 
-    job = store.create(source=dest, source_type="upload", language=language)
+    job = job_store.store.create(source=dest, source_type="upload", language=language)
     start_job(job.id)
     return JobSummary(
         job_id=job.id, status=job.status, source=file.filename or safe_name,
@@ -87,14 +88,14 @@ def list_jobs():
             job_id=j.id, status=JobStatus(j.status), source=j.source,
             language=j.language, created_at=j.created_at, finished_at=j.finished_at,
         )
-        for j in store.list_jobs()
+        for j in job_store.store.list_jobs()
     ]
 
 
 @router.get("/{job_id}", response_model=JobDetail)
 def get_job(job_id: str):
     """Poll job status / progress / results."""
-    job = store.get(job_id)
+    job = job_store.store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return _to_detail(job)

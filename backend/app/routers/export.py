@@ -4,14 +4,14 @@ import re
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from backend.app.job_store import store
+from backend.app import job_store
 from backend.app.services.exporter import export_markdown, export_pdf, export_txt
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
 
 def _get_result(job_id: str) -> dict:
-    job = store.get(job_id)
+    job = job_store.store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     if not job.result:
